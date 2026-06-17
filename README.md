@@ -2,7 +2,7 @@
 
 A Jarvis-style personal AI assistant with voice input, voice output, and PC automation. Built with a multi-process architecture: Electron HUD frontend, Express middleware, FastAPI backend, and SQLite memory.
 
-![MAX HUD](https://i.imgur.com/placeholder.png)
+![MAX HUD](docs/max_hud.png)
 
 ---
 
