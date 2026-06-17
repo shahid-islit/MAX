@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>MAX</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #000;
+      color: #fff;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Custom title bar ── */
+    #titlebar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 32px;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      -webkit-app-region: drag;
+    }
+
+    #drag-region {
+      flex: 1;
+      height: 100%;
+      -webkit-app-region: drag;
+    }
+
+    #window-controls {
+      display: flex;
+      -webkit-app-region: no-drag;
+      gap: 2px;
+      padding-right: 8px;
+    }
+
+    #min-btn, #max-btn, #close-btn {
+      background: transparent;
+      border: none;
+      color: rgba(240,165,0,0.35);
+      width: 32px;
+      height: 28px;
+      font-size: 11px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #min-btn:hover { background: rgba(240,165,0,0.1); color: #f0a500; }
+    #max-btn:hover { background: rgba(240,165,0,0.1); color: #f0a500; }
+    #close-btn:hover { background: rgba(255,50,50,0.25); color: #ff4444; }
+
+    #canvas-container {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+    }
+
+    #sidebar {
+      position: fixed;
+      right: 0; top: 32px;
+      width: 340px;
+      height: calc(100vh - 32px - 80px);
+      z-index: 10;
+      padding: 24px 16px 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: linear-gradient(to left, rgba(0,0,0,0.9) 60%, transparent);
+    }
+
+    #sidebar::-webkit-scrollbar { width: 3px; }
+    #sidebar::-webkit-scrollbar-thumb { background: rgba(240,165,0,0.4); border-radius: 4px; }
+
+    .msg {
+      opacity: 0;
+      transform: translateX(30px);
+      max-width: 92%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .msg.user {
+      align-self: flex-end;
+      background: rgba(240,165,0,0.12);
+      border: 1px solid rgba(240,165,0,0.35);
+      color: #f0c040;
+    }
+
+    .msg.max {
+      align-self: flex-start;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #d0d0d0;
+    }
+
+    .msg-label {
+      font-size: 9px;
+      font-weight: bold;
+      letter-spacing: 2.5px;
+      margin-bottom: 5px;
+      opacity: 0.5;
+      text-transform: uppercase;
+    }
+
+    #input-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 72px;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      padding: 0 28px;
+      gap: 12px;
+      border-top: 1px solid rgba(240,165,0,0.15);
+      background: rgba(0,0,0,0.92);
+    }
+
+    #user-input {
+      flex: 1;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(240,165,0,0.25);
+      border-radius: 30px;
+      padding: 11px 22px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.3s;
+      font-family: 'Segoe UI', Arial, sans-serif;
+    }
+
+    #user-input::placeholder { color: rgba(255,255,255,0.25); }
+    #user-input:focus { border-color: rgba(240,165,0,0.7); }
+
+    #send-btn {
+      background: rgba(240,165,0,0.15);
+      border: 1px solid rgba(240,165,0,0.4);
+      color: #f0a500;
+      border-radius: 50%;
+      width: 44px; height: 44px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    #send-btn:hover { background: rgba(240,165,0,0.3); }
+
+    /* ── Mic button ── */
+    #mic-btn {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.6);
+      border-radius: 50%;
+      width: 44px; height: 44px;
+      font-size: 18px;
+      cursor: pointer;
+      transition: all 0.25s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    #mic-btn:hover {
+      background: rgba(240,165,0,0.15);
+      border-color: rgba(240,165,0,0.5);
+      color: #f0a500;
+    }
+
+    #mic-btn.recording {
+      background: rgba(220,50,50,0.2);
+      border-color: rgba(220,50,50,0.8);
+      color: #ff4444;
+      animation: mic-pulse 1s infinite;
+    }
+
+    #mic-btn.processing {
+      background: rgba(240,165,0,0.1);
+      border-color: rgba(240,165,0,0.4);
+      color: #f0a500;
+      cursor: not-allowed;
+    }
+
+    @keyframes mic-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(220,50,50,0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(220,50,50,0); }
+    }
+
+    /* ── ESC countdown overlay ── */
+    #esc-overlay {
+      display: none;
+      position: fixed;
+      top: 42px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      background: rgba(0,0,0,0.85);
+      border: 1px solid rgba(220,50,50,0.6);
+      border-radius: 30px;
+      padding: 10px 22px;
+      font-size: 12px;
+      letter-spacing: 2px;
+      color: #ff6666;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    #esc-overlay.visible { display: block; }
+
+    #status {
+      position: fixed;
+      top: 42px; left: 26px;
+      z-index: 10;
+      font-size: 10px;
+      letter-spacing: 3.5px;
+      color: rgba(240,165,0,0.65);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: color 0.3s;
+    }
+
+    .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #f0a500;
+      animation: pulse 2.5s infinite;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.25; transform: scale(0.8); }
+    }
+
+    #typing {
+      display: none;
+      align-self: flex-start;
+      padding: 10px 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      gap: 5px;
+      align-items: center;
+    }
+
+    #typing.visible { display: flex; }
+
+    .dot-typing {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: rgba(240,165,0,0.6);
+      animation: bounce 1.2s infinite;
+    }
+
+    .dot-typing:nth-child(2) { animation-delay: 0.2s; }
+    .dot-typing:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); opacity: 0.4; }
+      50% { transform: translateY(-5px); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Custom title bar -->
+  <div id="titlebar">
+    <div id="drag-region"></div>
+    <div id="window-controls">
+      <button id="min-btn" title="Minimise">─</button>
+      <button id="max-btn" title="Maximise">□</button>
+      <button id="close-btn" title="Close">✕</button>
+    </div>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <div id="status">
+    <span class="dot" id="status-dot"></span>
+    <span id="status-text">MAX ONLINE</span>
+  </div>
+
+  <div id="esc-overlay">🔴 RECORDING — ESC to cancel (<span id="esc-count">7</span>s)</div>
+
+  <div id="sidebar">
+    <div id="typing">
+      <div class="dot-typing"></div>
+      <div class="dot-typing"></div>
+      <div class="dot-typing"></div>
+    </div>
+  </div>
+
+  <div id="input-bar">
+    <input id="user-input" type="text" placeholder="Talk to MAX..." autocomplete="off" />
+    <button id="mic-btn" title="Click to record voice (ESC to cancel)">🎙</button>
+    <button id="send-btn">&#9654;</button>
+  </div>
+
+  <script>
+    // ── Window controls ───────────────────────────────────────────────────────
+    const { ipcRenderer } = require('electron');
+    document.getElementById('min-btn').onclick  = () => ipcRenderer.send('win-minimize');
+    document.getElementById('max-btn').onclick  = () => ipcRenderer.send('win-maximize');
+    document.getElementById('close-btn').onclick = () => ipcRenderer.send('win-close');
+
+    // ── DOM refs ──────────────────────────────────────────────────────────────
+    const sidebar    = document.getElementById('sidebar');
+    const typing     = document.getElementById('typing');
+    const statusText = document.getElementById('status-text');
+    const statusDot  = document.getElementById('status-dot');
+    const micBtn     = document.getElementById('mic-btn');
+    const escOverlay = document.getElementById('esc-overlay');
+    const escCount   = document.getElementById('esc-count');
+
+    // ── WebSocket ─────────────────────────────────────────────────────────────
+    const ws = new WebSocket('ws://localhost:3000');
+
+    ws.onopen = () => {
+      addMessage('MAX', 'Welcome back, Shahid. Systems online.');
+    };
+
+    ws.onmessage = (event) => {
+      typing.classList.remove('visible');
+      const data = JSON.parse(event.data);
+      if (data.response) addMessage('MAX', data.response);
+      if (data.error)    addMessage('MAX', 'Something went wrong.');
+      setStatus('MAX ONLINE', '#f0a500');
+    };
+
+    ws.onerror = () => {
+      typing.classList.remove('visible');
+      addMessage('MAX', 'Connection error.');
+      setStatus('CONNECTION ERROR', '#ff4444');
+    };
+
+    // ── Status helper ─────────────────────────────────────────────────────────
+    function setStatus(text, color = '#f0a500') {
+      statusText.textContent = text;
+      statusDot.style.background = color;
+      statusText.parentElement.style.color = color;
+    }
+
+    // ── Message helper ────────────────────────────────────────────────────────
+    function addMessage(sender, text) {
+      const wrapper = document.createElement('div');
+      wrapper.className = `msg ${sender === 'MAX' ? 'max' : 'user'}`;
+
+      const label = document.createElement('div');
+      label.className = 'msg-label';
+      label.textContent = sender;
+
+      const content = document.createElement('div');
+      content.textContent = text;
+
+      wrapper.appendChild(label);
+      wrapper.appendChild(content);
+      sidebar.insertBefore(wrapper, typing);
+
+      gsap.to(wrapper, { opacity: 1, x: 0, duration: 0.45, ease: 'power2.out' });
+      sidebar.scrollTop = sidebar.scrollHeight;
+    }
+
+    // ── Text send ─────────────────────────────────────────────────────────────
+    function sendMessage() {
+      const input = document.getElementById('user-input');
+      const text  = input.value.trim();
+      if (!text || ws.readyState !== WebSocket.OPEN) return;
+
+      addMessage('Shahid', text);
+      typing.classList.add('visible');
+      sidebar.scrollTop = sidebar.scrollHeight;
+      ws.send(JSON.stringify({ text }));
+      input.value = '';
+      setStatus('THINKING...', '#f0a500');
+    }
+
+    document.getElementById('send-btn').onclick = sendMessage;
+    document.getElementById('user-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') sendMessage();
+    });
+
+    // ── Voice recording ───────────────────────────────────────────────────────
+    let mediaRecorder  = null;
+    let audioChunks    = [];
+    let isRecording    = false;
+    let escCountdown   = null;
+    let escSeconds     = 7;
+
+    async function startRecording() {
+      if (isRecording) {
+        stopRecording();
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        audioChunks   = [];
+
+        mediaRecorder.ondataavailable = e => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          if (!isRecording && audioChunks.length === 0) return;
+          const blob = new Blob(audioChunks, { type: 'audio/webm' });
+          audioChunks = [];
+          await transcribeAndSend(blob);
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+
+        micBtn.classList.add('recording');
+        micBtn.textContent = '⏹';
+        setStatus('RECORDING...', '#ff4444');
+        escOverlay.classList.add('visible');
+
+        escSeconds = 7;
+        escCount.textContent = escSeconds;
+        escCountdown = setInterval(() => {
+          escSeconds--;
+          escCount.textContent = escSeconds;
+          if (escSeconds <= 0) stopRecording();
+        }, 1000);
+
+      } catch (err) {
+        addMessage('MAX', 'Microphone access denied. Check permissions.');
+        setStatus('MAX ONLINE', '#f0a500');
+      }
+    }
+
+    function stopRecording(cancelled = false) {
+      if (!mediaRecorder) return;
+
+      clearInterval(escCountdown);
+      escOverlay.classList.remove('visible');
+      micBtn.classList.remove('recording');
+      micBtn.textContent = '🎙';
+      isRecording = false;
+
+      if (cancelled) {
+        audioChunks = [];
+        mediaRecorder.stream.getTracks().forEach(t => t.stop());
+        mediaRecorder = null;
+        setStatus('MAX ONLINE', '#f0a500');
+        addMessage('MAX', 'Recording cancelled.');
+        return;
+      }
+
+      if (mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+
+      micBtn.classList.add('processing');
+      micBtn.textContent = '⏳';
+      setStatus('TRANSCRIBING...', '#f0a500');
+    }
+
+    async function transcribeAndSend(blob) {
+      try {
+        const formData = new FormData();
+        formData.append('file', blob, 'recording.webm');
+
+        const transcribeRes = await fetch('http://localhost:8000/transcribe', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!transcribeRes.ok) throw new Error(`Transcription failed: ${transcribeRes.status}`);
+
+        const { text } = await transcribeRes.json();
+
+        if (!text || text.trim() === '' || text.trim() === '.') {
+          addMessage('MAX', 'Could not hear anything. Try again.');
+          return;
+        }
+
+        addMessage('Shahid', `🎙 ${text}`);
+        typing.classList.add('visible');
+        sidebar.scrollTop = sidebar.scrollHeight;
+        ws.send(JSON.stringify({ text }));
+        setStatus('THINKING...', '#f0a500');
+
+      } catch (err) {
+        addMessage('MAX', `Voice error: ${err.message}`);
+        setStatus('MAX ONLINE', '#f0a500');
+      } finally {
+        micBtn.classList.remove('processing');
+        micBtn.textContent = '🎙';
+        mediaRecorder = null;
+      }
+    }
+
+    micBtn.addEventListener('click', startRecording);
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && isRecording) stopRecording(true);
+    });
+
+    // ── Three.js Orb ──────────────────────────────────────────────────────────
+    const scene  = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 5;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    const orbGeo = new THREE.SphereGeometry(0.9, 64, 64);
+    const orbMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.0 });
+    const orb    = new THREE.Mesh(orbGeo, orbMat);
+    scene.add(orb);
+
+    const coreColors    = [0xffffff, 0xffe066, 0xf0a500, 0xc06000];
+    const coreSizes     = [0.15, 0.28, 0.42, 0.58];
+    const coreOpacities = [1.0, 0.55, 0.25, 0.08];
+    coreColors.forEach((col, i) => {
+      const g = new THREE.SphereGeometry(coreSizes[i], 32, 32);
+      const m = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: coreOpacities[i] });
+      scene.add(new THREE.Mesh(g, m));
+    });
+
+    const rings    = [];
+    const ringData = [
+      { radius: 1.2, tube: 0.008, color: 0xf0a500, tiltX: 0.4,  tiltZ: 0.2,  speed:  0.004  },
+      { radius: 1.5, tube: 0.006, color: 0xc07800, tiltX: -0.6, tiltZ: 0.5,  speed: -0.003  },
+      { radius: 1.8, tube: 0.005, color: 0x804000, tiltX: 1.0,  tiltZ: -0.3, speed:  0.002  },
+      { radius: 2.1, tube: 0.004, color: 0x502000, tiltX: -0.3, tiltZ: 0.8,  speed: -0.0015 },
+    ];
+    ringData.forEach(r => {
+      const geo  = new THREE.TorusGeometry(r.radius, r.tube, 8, 120);
+      const mat  = new THREE.MeshBasicMaterial({ color: r.color, transparent: true, opacity: 0.85 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = r.tiltX;
+      mesh.rotation.z = r.tiltZ;
+      scene.add(mesh);
+      rings.push({ mesh, speed: r.speed });
+    });
+
+    const particleCount = 5000;
+    const pgeo          = new THREE.BufferGeometry();
+    const positions     = new Float32Array(particleCount * 3);
+    const pcolors       = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount; i++) {
+      const zone = Math.random();
+      let x, y, z;
+      if (zone < 0.5) {
+        const phi   = Math.acos(2 * Math.random() - 1);
+        const theta = Math.random() * Math.PI * 2;
+        const r     = 1.3 + Math.random() * 0.6;
+        x = r * Math.sin(phi) * Math.cos(theta);
+        y = r * Math.sin(phi) * Math.sin(theta);
+        z = r * Math.cos(phi);
+      } else if (zone < 0.8) {
+        const angle = Math.random() * Math.PI * 2;
+        const r     = 1.8 + Math.random() * 2.5;
+        x = Math.cos(angle) * r * (0.6 + Math.random() * 0.4);
+        y = Math.sin(angle) * r * (0.6 + Math.random() * 0.4);
+        z = (Math.random() - 0.5) * 1.5;
+      } else {
+        x = (Math.random() - 0.5) * 12;
+        y = (Math.random() - 0.5) * 12;
+        z = (Math.random() - 0.5) * 4;
+      }
+      positions[i * 3]     = x;
+      positions[i * 3 + 1] = y;
+      positions[i * 3 + 2] = z;
+      const dist      = Math.sqrt(x*x + y*y + z*z);
+      const intensity = Math.max(0, 1 - dist / 5);
+      pcolors[i * 3]     = 0.7 + intensity * 0.3;
+      pcolors[i * 3 + 1] = 0.3 + intensity * 0.35;
+      pcolors[i * 3 + 2] = intensity * 0.05;
+    }
+
+    pgeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    pgeo.setAttribute('color',    new THREE.BufferAttribute(pcolors, 3));
+
+    const sprite = new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/disc.png');
+    const pmat   = new THREE.PointsMaterial({
+      size: 0.025, vertexColors: true, transparent: true,
+      opacity: 0.85, map: sprite, alphaTest: 0.1,
+    });
+    const particlesMesh = new THREE.Points(pgeo, pmat);
+    scene.add(particlesMesh);
+
+    let mouseX = 0, mouseY = 0;
+    document.addEventListener('mousemove', e => {
+      mouseX = (e.clientX / window.innerWidth  - 0.5) * 2;
+      mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+    });
+
+    let time = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+      time += 0.01;
+      particlesMesh.rotation.y += 0.0008;
+      particlesMesh.rotation.x += 0.0003;
+      rings.forEach(r => { r.mesh.rotation.y += r.speed; });
+      camera.position.x += (mouseX * 0.5 - camera.position.x) * 0.02;
+      camera.position.y += (-mouseY * 0.5 - camera.position.y) * 0.02;
+      camera.lookAt(scene.position);
+      pmat.opacity = 0.75 + Math.sin(time) * 0.1;
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
